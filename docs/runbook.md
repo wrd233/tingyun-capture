@@ -50,3 +50,13 @@ npm start -- --target-origin http://127.0.0.1:5174
 ## Raw Safety
 
 Raw is private local data. Do not share `capture-data/<session_id>/raw/`. Use the AI-ready ZIP for external analysis.
+
+## AI-ready Review
+
+AI-ready is generated when a Session seals and can be regenerated from Review. The package is self-contained under:
+
+```text
+capture-data/<session_id>/derived/ai-ready/
+```
+
+External AI should read `README_FOR_AI.md` first, then `journey.md`, `interaction-windows.jsonl`, and `network-index.jsonl`. Static resource bodies are intentionally omitted from AI-ready and remain in Raw.

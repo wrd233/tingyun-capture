@@ -125,6 +125,14 @@ export interface IntegritySummary {
   gaps: IntegrityGap[];
 }
 
+export interface SubmitTrigger {
+  kind: "submit_event" | "submit_control_click" | "enter_key_submit";
+  interaction_id?: string;
+  form_id?: string;
+  form_name?: string;
+  control?: unknown;
+}
+
 export type RawEvent =
   | { type: "session_started"; at: string; session_id: string; name: string }
   | { type: "session_end_requested"; at: string; session_id: string }
@@ -140,8 +148,8 @@ export type RawEvent =
   | { type: "frame_destroyed"; at: string; frame_id: string; tab_id: string }
   | { type: "url_changed"; at: string; tab_id?: string; frame_id?: string; before_url?: string; after_url: string; change_type: string; step_id?: string }
   | { type: "interaction_recorded"; at: string; interaction_id: string; interaction: Record<string, unknown> }
-  | { type: "form_state_recorded"; at: string; form_state_id: string; context: string; state: unknown; related_interaction_id?: string }
-  | { type: "submit_window_opened"; at: string; submit_window_id: string; form_state_id?: string; interaction_id?: string; closes_at: string }
+  | { type: "form_state_recorded"; at: string; form_state_id: string; context: string; state: unknown; related_interaction_id?: string; trigger?: SubmitTrigger }
+  | { type: "submit_window_opened"; at: string; submit_window_id: string; form_state_id?: string; interaction_id?: string; closes_at: string; trigger?: SubmitTrigger }
   | { type: "request_started"; at: string; request: RequestRecord }
   | { type: "response_received"; at: string; request_id: string; status: number; headers: Record<string, string>; body?: BodyRef }
   | { type: "request_completed"; at: string; request: RequestRecord }

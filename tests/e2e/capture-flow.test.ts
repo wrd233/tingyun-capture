@@ -65,6 +65,52 @@ test("captures cascade form submit into Raw and AI-ready evidence", async () => 
   expect(networkIndex).toContain("/save");
 });
 
+test("does not open submit windows for navigation clicks with hidden submit controls", async () => {
+  const config = buildConfig({ targetOrigin: origin, outputDir: tmp, profileDir: path.join(tmp, "profile"), openSidecar: false });
+  config.finalizationTimeoutMs = 100;
+  const store = new RawStore(config);
+  const aiReady = new AiReadyGenerator(config, store);
+  const sessions = new SessionManager(config, store, aiReady);
+  browser = new BrowserController(config, store, sessions);
+  await browser.start();
+
+  const manifest = await sessions.startSession("导航点击");
+  const page = await browser.openPageForTest(`${origin}/nav-submit`);
+  await page.click("#plain-nav");
+  await page.waitForURL(`${origin}/reliability`);
+  await sessions.endSession("导航结束");
+
+  const events = await store.events(manifest.session_id);
+  expect(events.some((event) => event.type === "interaction_recorded" && event.interaction.interaction_type === "click")).toBe(true);
+  expect(events.some((event) => event.type === "submit_window_opened")).toBe(false);
+  const aiReadyEvents = await fs.promises.readFile(path.join(tmp, manifest.session_id, "derived", "ai-ready", "events.jsonl"), "utf8");
+  expect(aiReadyEvents).not.toContain("submit_window_opened");
+});
+
+test("records opener_tab_id for target-origin tabs opened by the browser", async () => {
+  const config = buildConfig({ targetOrigin: origin, outputDir: tmp, profileDir: path.join(tmp, "profile"), openSidecar: false });
+  config.finalizationTimeoutMs = 100;
+  const store = new RawStore(config);
+  const aiReady = new AiReadyGenerator(config, store);
+  const sessions = new SessionManager(config, store, aiReady);
+  browser = new BrowserController(config, store, sessions);
+  await browser.start();
+
+  const manifest = await sessions.startSession("新标签页");
+  const page = await browser.openPageForTest(`${origin}/`);
+  await page.click('a[href="/new-tab"]');
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  await sessions.endSession("新标签页结束");
+
+  const tabEvents = (await store.events(manifest.session_id)).filter((event) => event.type === "tab_created");
+  const rootTab = tabEvents.find((event) => event.type === "tab_created" && event.tab.first_target_url === `${origin}/`);
+  const newTab = tabEvents.find((event) => event.type === "tab_created" && event.tab.first_target_url === `${origin}/new-tab`);
+  expect(rootTab?.type).toBe("tab_created");
+  expect(newTab?.type).toBe("tab_created");
+  if (!rootTab || rootTab.type !== "tab_created" || !newTab || newTab.type !== "tab_created") throw new Error("missing tab facts");
+  expect(newTab.tab.opener_tab_id).toBe(rootTab.tab.tab_id);
+});
+
 function listenRandomPort(): Promise<Server> {
   return new Promise((resolve, reject) => {
     const app = createTestSiteApp();

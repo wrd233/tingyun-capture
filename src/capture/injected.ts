@@ -9,6 +9,8 @@ export function injectedObserverSource(): string {
       window.tyCaptureEvent && window.tyCaptureEvent(payload);
     } catch {}
   };
+  let eventCounter = 0;
+  const nextClientEventId = () => "dom-" + Date.now() + "-" + (++eventCounter);
 
   const textOf = (el) => (el && (el.innerText || el.textContent || "") || "").trim().replace(/\\s+/g, " ").slice(0, 240);
   const labelFor = (el) => {
@@ -64,23 +66,42 @@ export function injectedObserverSource(): string {
       visible: Boolean(field.offsetParent || field.getClientRects().length)
     }));
   };
-  const isSubmitCandidate = (el) => {
-    const text = (textOf(el) + " " + (el.getAttribute && (el.getAttribute("aria-label") || el.value || ""))).toLowerCase();
+  const isVisible = (el) => Boolean(el && (el.offsetParent || el.getClientRects().length));
+  const associatedForm = (el) => {
+    if (!el) return undefined;
+    if (el.form) return el.form;
+    return el.closest && el.closest("form");
+  };
+  const formIdentity = (form) => form ? { form_id: form.id || undefined, form_name: form.getAttribute("name") || undefined } : {};
+  const isSubmitControl = (el) => {
+    if (!el || !isVisible(el) || el.disabled || el.getAttribute("aria-disabled") === "true") return false;
+    const tag = el.tagName ? el.tagName.toLowerCase() : "";
     const type = (el.getAttribute && el.getAttribute("type") || "").toLowerCase();
-    return type === "submit" || ["保存", "提交", "确定", "创建", "新增", "应用", "完成"].some((word) => text.includes(word));
+    const form = associatedForm(el);
+    if (!form) return false;
+    if (tag === "button") return !type || type === "submit";
+    if (tag === "input") return type === "submit" || type === "image";
+    return false;
   };
 
-  const beforeSubmit = (el, interactionType) => {
-    if (isSubmitCandidate(el)) {
-      send({ kind: "form_state", context: "before_submit", state: formSnapshot(el), interaction_type: interactionType });
-    }
+  const beforeSubmit = (el, triggerKind, clientEventId) => {
+    if (!isSubmitControl(el)) return;
+    const form = associatedForm(el);
+    send({
+      kind: "form_state",
+      context: "before_submit",
+      state: formSnapshot(form || el),
+      related_client_event_id: clientEventId,
+      trigger: { kind: triggerKind, ...formIdentity(form), control: controlSnapshot(el) }
+    });
   };
 
   document.addEventListener("click", (event) => {
     const el = event.target && event.target.closest ? event.target.closest("button, a, input, select, textarea, [role=button]") : event.target;
-    beforeSubmit(el, "click");
-    send({ kind: "interaction", interaction_type: "click", control: controlSnapshot(el), value: fieldValue(el), url: location.href, title: document.title });
-    if (el && (el.matches("select,input,textarea") || isSubmitCandidate(el))) {
+    const clientEventId = nextClientEventId();
+    send({ kind: "interaction", client_event_id: clientEventId, interaction_type: "click", control: controlSnapshot(el), value: fieldValue(el), url: location.href, title: document.title });
+    beforeSubmit(el, "submit_control_click", clientEventId);
+    if (el && (el.matches("select,input,textarea") || isSubmitControl(el))) {
       setTimeout(() => send({ kind: "form_state", context: "after_interaction", state: formSnapshot(el), interaction_type: "click" }), 700);
     }
   }, true);
@@ -89,19 +110,36 @@ export function injectedObserverSource(): string {
     document.addEventListener(type, (event) => {
       const el = event.target;
       if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement)) return;
-      send({ kind: "interaction", interaction_type: el instanceof HTMLSelectElement ? "select" : type, control: controlSnapshot(el), value: fieldValue(el), options: el instanceof HTMLSelectElement ? optionSnapshot(el) : undefined, url: location.href, title: document.title });
+      send({ kind: "interaction", client_event_id: nextClientEventId(), interaction_type: el instanceof HTMLSelectElement ? "select" : type, control: controlSnapshot(el), value: fieldValue(el), options: el instanceof HTMLSelectElement ? optionSnapshot(el) : undefined, url: location.href, title: document.title });
       setTimeout(() => send({ kind: "form_state", context: "after_interaction", state: formSnapshot(el), interaction_type: type }), 700);
     }, true);
   }
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
     const el = event.target;
-    beforeSubmit(el, "enter");
-    send({ kind: "interaction", interaction_type: "enter", control: controlSnapshot(el), value: fieldValue(el), url: location.href, title: document.title });
+    const clientEventId = nextClientEventId();
+    send({ kind: "interaction", client_event_id: clientEventId, interaction_type: "enter", control: controlSnapshot(el), value: fieldValue(el), url: location.href, title: document.title });
+    const form = associatedForm(el);
+    if (form && isVisible(el) && !el.disabled) {
+      send({
+        kind: "form_state",
+        context: "before_submit",
+        state: formSnapshot(form),
+        related_client_event_id: clientEventId,
+        trigger: { kind: "enter_key_submit", ...formIdentity(form), control: controlSnapshot(el) }
+      });
+    }
   }, true);
   document.addEventListener("submit", (event) => {
-    send({ kind: "form_state", context: "before_submit", state: formSnapshot(event.target), interaction_type: "submit" });
-    send({ kind: "interaction", interaction_type: "submit", control: controlSnapshot(event.target), url: location.href, title: document.title });
+    const clientEventId = nextClientEventId();
+    send({ kind: "interaction", client_event_id: clientEventId, interaction_type: "submit", control: controlSnapshot(event.target), url: location.href, title: document.title });
+    send({
+      kind: "form_state",
+      context: "before_submit",
+      state: formSnapshot(event.target),
+      related_client_event_id: clientEventId,
+      trigger: { kind: "submit_event", ...formIdentity(event.target), control: controlSnapshot(event.target) }
+    });
   }, true);
 
   const originalPush = history.pushState;

@@ -11,6 +11,8 @@ import { SessionManager } from "./session-manager";
 interface PageInfo {
   tabId: string;
   lastUrl?: string;
+  openerTabId?: string;
+  targetTabRecorded?: boolean;
 }
 
 export class BrowserController {
@@ -18,6 +20,7 @@ export class BrowserController {
   private pages = new Map<Page, PageInfo>();
   private frames = new Map<Frame, string>();
   private requests = new Map<Request, string>();
+  private clientInteractions = new Map<string, string>();
   private closing = false;
 
   constructor(
@@ -92,14 +95,12 @@ export class BrowserController {
   private async attachPage(page: Page): Promise<PageInfo> {
     let info = this.pages.get(page);
     if (info) return info;
-    info = { tabId: this.sessions.ids.next("tab"), lastUrl: page.url() };
+    const opener = await page.opener().catch(() => null);
+    const openerTabId = opener ? this.pages.get(opener)?.tabId : undefined;
+    info = { tabId: this.sessions.ids.next("tab"), lastUrl: page.url(), openerTabId };
     this.pages.set(page, info);
     if (isTargetUrl(this.config, page.url())) {
-      await this.sessions.recordEvent({
-        type: "tab_created",
-        at: nowIso(),
-        tab: { tab_id: info.tabId, created_at: nowIso(), first_target_url: page.url(), current_url: page.url(), title: await page.title().catch(() => undefined) }
-      });
+      await this.recordTargetTabCreated(page, info, page.url());
     }
     page.on("close", () => void this.onPageClosed(page));
     page.on("framenavigated", (frame) => void this.onFrameNavigated(page, frame));
@@ -164,6 +165,7 @@ export class BrowserController {
   private async onFrameNavigated(page: Page, frame: Frame): Promise<void> {
     const info = this.pages.get(page);
     if (!info || !isTargetUrl(this.config, frame.url())) return;
+    if (frame === page.mainFrame() && !info.targetTabRecorded) await this.recordTargetTabCreated(page, info, frame.url());
     const before = frame === page.mainFrame() ? info.lastUrl : undefined;
     if (frame === page.mainFrame()) info.lastUrl = frame.url();
     await this.sessions.recordEvent({
@@ -175,6 +177,24 @@ export class BrowserController {
       after_url: frame.url(),
       change_type: "navigation",
       step_id: this.sessions.activeStepId()
+    });
+  }
+
+  private async recordTargetTabCreated(page: Page, info: PageInfo, url: string): Promise<void> {
+    if (info.targetTabRecorded) return;
+    info.targetTabRecorded = true;
+    const at = nowIso();
+    await this.sessions.recordEvent({
+      type: "tab_created",
+      at,
+      tab: {
+        tab_id: info.tabId,
+        created_at: at,
+        opener_tab_id: info.openerTabId,
+        first_target_url: url,
+        current_url: url,
+        title: await page.title().catch(() => undefined)
+      }
     });
   }
 
@@ -320,29 +340,37 @@ export class BrowserController {
     }
     if (payload.kind === "form_state") {
       const formStateId = this.sessions.ids.next("form-state");
+      const trigger = submitTriggerFromPayload(payload, this.clientInteractions);
       await this.sessions.recordEvent({
         type: "form_state_recorded",
         at: nowIso(),
         form_state_id: formStateId,
         context: String(payload.context ?? "observed"),
-        state: payload.state
+        state: payload.state,
+        related_interaction_id: trigger?.interaction_id,
+        trigger
       });
-      if (payload.context === "before_submit") {
+      if (payload.context === "before_submit" && trigger) {
         await this.sessions.recordEvent({
           type: "submit_window_opened",
           at: nowIso(),
           submit_window_id: this.sessions.ids.next("submit-window"),
           form_state_id: formStateId,
+          interaction_id: trigger.interaction_id,
+          trigger,
           closes_at: new Date(Date.now() + this.config.submitObservationMs).toISOString()
         });
       }
       return;
     }
     if (payload.kind === "interaction") {
+      const interactionId = this.sessions.ids.next("interaction");
+      const clientEventId = typeof payload.client_event_id === "string" ? payload.client_event_id : undefined;
+      if (clientEventId) this.clientInteractions.set(clientEventId, interactionId);
       await this.sessions.recordEvent({
         type: "interaction_recorded",
         at: nowIso(),
-        interaction_id: this.sessions.ids.next("interaction"),
+        interaction_id: interactionId,
         interaction: {
           tab_id: info.tabId,
           step_id: this.sessions.activeStepId(),
@@ -356,6 +384,21 @@ export class BrowserController {
       });
     }
   }
+}
+
+function submitTriggerFromPayload(payload: Record<string, unknown>, interactions: Map<string, string>) {
+  if (payload.context !== "before_submit" || !payload.trigger || typeof payload.trigger !== "object") return undefined;
+  const trigger = payload.trigger as Record<string, unknown>;
+  const kind = trigger.kind;
+  if (kind !== "submit_event" && kind !== "submit_control_click" && kind !== "enter_key_submit") return undefined;
+  const clientEventId = typeof payload.related_client_event_id === "string" ? payload.related_client_event_id : undefined;
+  return {
+    kind,
+    interaction_id: clientEventId ? interactions.get(clientEventId) : undefined,
+    form_id: typeof trigger.form_id === "string" ? trigger.form_id : undefined,
+    form_name: typeof trigger.form_name === "string" ? trigger.form_name : undefined,
+    control: trigger.control
+  } as const;
 }
 
 async function safeEvaluate(page: Page, source: string): Promise<unknown> {

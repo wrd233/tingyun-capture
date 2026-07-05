@@ -12,6 +12,7 @@ app.get("/", (_req, res) => {
 <h1>Capture Test Site</h1>
 <nav>
   <a href="/cascade">Cascade form</a>
+  <a href="/nav-submit">Navigation with hidden submit</a>
   <a href="/reliability">Reliability</a>
   <a href="/new-tab" target="_blank">Open target tab</a>
 </nav>
@@ -56,6 +57,16 @@ document.querySelector('#alarm').addEventListener('submit', async (event) => {
   document.querySelector('#result').textContent = JSON.stringify(data);
 });
 </script>`);
+});
+
+app.get("/nav-submit", (_req, res) => {
+  res.type("html").send(`<!doctype html>
+<meta charset="utf-8" />
+<title>Navigation</title>
+<nav><a id="plain-nav" href="/reliability">应用</a></nav>
+<form id="hidden-form">
+  <button id="hidden-submit" type="submit" style="display:none">确 定</button>
+</form>`);
 });
 
 app.get("/reliability", (_req, res) => {

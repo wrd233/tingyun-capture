@@ -231,10 +231,10 @@ export class SessionManager {
     await this.store.writeIntegrity(summary);
     try {
       await this.aiReady.generate(this.manifest.session_id);
-      this.manifest = await this.store.updateManifest((manifest) => ({ ...manifest, ai_ready_status: "READY" }));
+      this.manifest = await this.store.loadManifest(this.manifest.session_id);
     } catch (error) {
       await this.store.recordGap({ type: "ai_ready_failed", reason: String(error) });
-      this.manifest = await this.store.updateManifest((manifest) => ({ ...manifest, ai_ready_status: "FAILED" }));
+      this.manifest = await this.store.loadManifest(this.manifest.session_id);
     }
     this.currentStep = undefined;
     this.acceptingNewRequests = true;

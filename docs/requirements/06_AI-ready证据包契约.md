@@ -132,10 +132,12 @@ README_FOR_AI.md
 ai-ready/
 ├── README_FOR_AI.md
 ├── session.json
+├── journey.md
+├── interaction-windows.jsonl
 ├── events.jsonl
 ├── network-index.jsonl
 ├── integrity.json
-├── timeline.md              # 可选但推荐，作为人类/AI 主线阅读
+├── omissions.json
 └── evidence/
     ├── requests/
     └── responses/
@@ -144,6 +146,7 @@ ai-ready/
 核心要求不是文件数量，而是：
 
 - 单一入口。
+- 以人类操作为主线的 Journey。
 - 稳定机器索引。
 - 证据独立存放。
 - ID 引用一致。
@@ -167,7 +170,8 @@ ai-ready/
 明确告诉 Agent：
 
 1. 先读本文件。
-2. 再读 Session / Step 主线。
+2. 再读 `journey.md` 中的 Session / Step / Interaction 主线。
+3. 需要机器分组时读 `interaction-windows.jsonl`。
 3. 需要时查询 `network-index.jsonl`。
 4. 按 evidence ID 打开具体 Request / Response。
 
@@ -303,7 +307,7 @@ Capture 不替 AI 挑“重要 Body”。
 
 ### 9.2 静态资源
 
-明显静态资源默认仍只保留元数据。
+明显静态资源默认不复制 Body 到 AI-ready，只在 AI-ready 中保留统计和说明。完整 Body 仍在 Raw 中，不属于 Capture Gap。
 
 ### 9.3 过大 Body
 

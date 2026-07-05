@@ -12,7 +12,7 @@ The browser is long-lived relative to Sessions. Users may log in and prepare pag
 
 ## Tab, Frame, URL
 
-Every target-origin page receives a stable `tab-*` ID. Frame events receive `frame-*` IDs when visible to Playwright. Navigation events and injected `pushState`, `replaceState`, and `hashchange` observations are written as `url_changed`.
+Every target-origin page receives a stable `tab-*` ID. When Playwright exposes a browser opener page, `tab_created.tab.opener_tab_id` records that raw browser fact. If a page is first seen as `about:blank`, `tab_created` is emitted when it first navigates into the target origin. Frame events receive `frame-*` IDs when visible to Playwright. Navigation events and injected `pushState`, `replaceState`, and `hashchange` observations are written as `url_changed`.
 
 ## Interactions and Forms
 
@@ -25,7 +25,7 @@ An init script installs passive capture-phase listeners. It records:
 - Enter and submit;
 - lightweight semantic control snapshots.
 
-Before high-confidence submit candidates, it writes a `before_submit` form state and opens a deterministic submit observation window. It never clicks, opens dropdowns, changes values, or submits pages.
+Before actual submit signals, it writes a `before_submit` form state and opens a deterministic submit observation window with an auditable trigger. Valid triggers are browser `submit` events, visible enabled submit controls associated with a form, and Enter in a form field. A normal anchor click or a hidden submit button elsewhere on the page does not open a submit window. It never clicks, opens dropdowns, changes values, or submits pages.
 
 ## Network
 
@@ -36,7 +36,7 @@ For target-origin requests that start while Session is active:
 - `request_completed` writes response body references and lifecycle facts.
 - `request_failed` records the raw Playwright failure text.
 
-Static resource types remain metadata-first. Dynamic requests get body files unless the body is unavailable, binary, or over the configured hard limit.
+Raw still saves request and response bodies for observed target-origin requests unless the body is unavailable or over the configured hard limit. AI-ready later applies its own evidence policy so static resource bodies remain in Raw only.
 
 ## Downloads
 
