@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "task_id": "r1-verified-navigation-url",
+  "title": "Verified Navigation URL",
+  "goal": "Record the observed source, action, target URL/title, request refs, and route-parameter candidates for a chosen object",
+  "success_criteria": ["record source page and action", "record target URL and title", "record request refs", "record route parameter correlation candidates", "perform Reload or New Tab Verify"],
+  "do_not_assume": ["do not guess a route from an identifier", "observed does not mean stable"],
+  "created_at": "2026-07-11T00:00:00.000Z"
+}

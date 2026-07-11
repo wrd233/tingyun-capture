@@ -9,6 +9,9 @@ type CaptureState = {
   counters: { dynamicRequests: number; failedRequests: number; newTabs: number; urlChanges: number };
   recentEvents: Array<Record<string, unknown>>;
   recentSessions: Array<Record<string, unknown>>;
+  currentTask?: { task_id: string; title: string; goal: string };
+  currentPage?: { tab_id?: string; url?: string; title?: string };
+  captureHealth?: { ok: boolean };
 };
 
 type Review = {
@@ -18,6 +21,11 @@ type Review = {
   requests: Array<Record<string, unknown>>;
   integrity?: Record<string, unknown>;
   bodies: Record<string, string>;
+  interactionWindows?: Array<Record<string, unknown>>;
+  navigationObservations?: Array<Record<string, unknown>>;
+  correlationCandidates?: Array<Record<string, unknown>>;
+  downloadIndex?: Array<Record<string, unknown>>;
+  endpointObservations?: Array<Record<string, unknown>>;
 };
 
 function App() {
@@ -69,6 +77,12 @@ function App() {
 
       <section className="band">
         <div className="current">
+          <div className="contextGrid" aria-label="Research context">
+            <div><span>Current Task</span><strong>{state?.currentTask?.title ?? "—"}</strong><code>{state?.currentTask?.task_id ?? ""}</code></div>
+            <div><span>Current Page</span><strong>{state?.currentPage?.title ?? "—"}</strong><code>{state?.currentPage?.url ?? ""}</code></div>
+            <div><span>Current Window</span><strong>{state?.recentEvents?.find((event) => event.type === "interaction_recorded") ? "Observed" : "—"}</strong></div>
+            <div><span>Capture Health</span><strong>{state?.captureHealth?.ok ? "Healthy" : "Check"}</strong></div>
+          </div>
           <h2>当前 Session</h2>
           {active ? (
             <>
@@ -91,7 +105,17 @@ function App() {
               </div>
               <div className="controls">
                 <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="记一下……" />
-                <button onClick={() => action("/api/note", { text: note }, refresh, setError).then(() => setNote(""))}>记录备注</button>
+                <button onClick={() => action("/api/annotation", { kind: "MARK", content: note || "Mark" }, refresh, setError)}>Mark</button>
+                <button onClick={() => action("/api/annotation", { kind: "NOTE", content: note }, refresh, setError).then(() => setNote(""))}>Note</button>
+                <button onClick={() => action("/api/annotation", { kind: "FINISH", content: note || "Finish" }, refresh, setError)}>Finish</button>
+              </div>
+              <div className="controls">
+                <button onClick={() => action("/api/navigation/record-current-url", {}, refresh, setError)}>Record Current URL</button>
+                <button onClick={() => action("/api/navigation/reload-verify", {}, refresh, setError)}>Reload Verify</button>
+                <button onClick={() => action("/api/navigation/new-tab-verify", {}, refresh, setError)}>New Tab Verify</button>
+                <button onClick={() => action("/api/validate", {}, refresh, setError)}>Validate</button>
+                <button onClick={() => action("/api/export/private", {}, refresh, setError)}>Export Private</button>
+                <button onClick={() => action("/api/export/shareable", {}, refresh, setError)}>Export Shareable</button>
               </div>
               <div className="controls">
                 <input value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="本次探索总结（可选）" />
@@ -181,6 +205,14 @@ function App() {
               </ul>
             </div>
           </div>
+          <div className="researchReview">
+            <ResearchList title="Interaction Windows" items={review.interactionWindows} />
+            <ResearchList title="Navigation Observations" items={review.navigationObservations} />
+            <ResearchList title="Correlation Candidates" items={review.correlationCandidates} />
+            <ResearchList title="Endpoint Observations" items={review.endpointObservations} />
+            <ResearchList title="Downloads" items={review.downloadIndex} />
+            <section><h3>Security Status</h3><p>Shareable export requires a PASS result before ZIP publication.</p></section>
+          </div>
         </section>
       )}
     </main>
@@ -189,6 +221,10 @@ function App() {
 
 function Metric({ label, value }: { label: string; value: number }) {
   return <div><strong>{value}</strong><span>{label}</span></div>;
+}
+
+function ResearchList({ title, items = [] }: { title: string; items?: Array<Record<string, unknown>> }) {
+  return <section><h3>{title}</h3>{items.length === 0 ? <p>No observations generated.</p> : <ul className="timeline">{items.map((item, index) => <li key={index}><pre>{JSON.stringify(item, null, 2)}</pre></li>)}</ul>}</section>;
 }
 
 function bodyBlock(title: string, ref: Record<string, unknown> | undefined, bodies: Record<string, string>) {

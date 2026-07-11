@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx src/main.ts start",
+    "start": "tsx src/main.ts",
     "test-site": "tsx src/test-site/server.ts",
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"tsx src/main.ts start --no-open-sidecar\"",
     "build": "tsc --noEmit && vite build",
@@ -14,15 +14,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
     "archiver": "^7.0.1",
     "commander": "^12.1.0",
+    "exceljs": "^4.4.0",
     "express": "^4.21.2",
     "playwright": "^1.49.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tsx": "^4.19.2",
-    "vite": "^5.4.11",
+    "yauzl": "^3.4.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -31,9 +31,15 @@
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
+    "@types/yauzl": "^3.4.0",
+    "@vitejs/plugin-react": "^4.7.0",
     "concurrently": "^9.1.2",
     "jsdom": "^25.0.1",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vite": "^6.4.3",
+    "vitest": "^3.2.6"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
   }
 }

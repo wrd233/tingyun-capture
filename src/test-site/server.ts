@@ -1,4 +1,5 @@
 import express from "express";
+import ExcelJS from "exceljs";
 
 export function createTestSiteApp(): express.Express {
 const app = express();
@@ -22,6 +23,51 @@ app.get("/", (_req, res) => {
 
 app.get("/new-tab", (_req, res) => {
   res.type("html").send("<!doctype html><title>New Tab</title><h1>New Tab</h1><button onclick=\"history.pushState({},'', '/new-tab?traceGuid=abc123#detail')\">SPA URL</button>");
+});
+
+app.get("/research-list", (_req, res) => {
+  res.type("html").send(`<!doctype html>
+<meta charset="utf-8" />
+<title>Research List</title>
+<h1>Trace List</h1>
+<button id="open-detail">Open Trace</button>
+<button id="open-popup" onclick="window.open('/research-popup','_blank')">Open Popup</button>
+<a id="download-csv" href="/download.csv">Download CSV</a>
+<a id="download-xlsx" href="/download.xlsx">Download XLSX</a>
+<pre id="detail-result"></pre>
+<script>
+document.querySelector('#open-detail').addEventListener('click', async () => {
+  const selected = await fetch('/api/research/selection').then(r => r.json());
+  history.pushState({}, '', '/research-detail?actionId=' + selected.actionId);
+  const [query, body] = await Promise.all([
+    fetch('/api/research/detail?actionId=' + selected.actionId).then(r => r.json()),
+    fetch('/api/research/detail', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ actionId: selected.actionId }) }).then(r => r.json())
+  ]);
+  document.querySelector('#detail-result').textContent = JSON.stringify({ query, body });
+});
+</script>`);
+});
+
+app.get("/research-popup", (_req, res) => res.type("html").send("<!doctype html><title>Research Popup</title><h1>Popup Detail</h1>"));
+app.get("/api/research/selection", (_req, res) => res.json({ actionId: 7788, page: 1, enabled: true }));
+app.get("/api/research/detail", (req, res) => res.json({ actionId: Number(req.query.actionId), code: -1, status: "observed" }));
+app.post("/api/research/detail", (req, res) => res.status(200).json({ code: -1, received: req.body }));
+app.get("/api/research/secret", (_req, res) => res.json({ access_token: "fake-secret", Authorization: "Bearer fake.jwt.token" }));
+app.get("/api/research/large", (_req, res) => res.type("text/plain").send("x".repeat(11 * 1024 * 1024)));
+app.get("/api/research/fail", (_req, res) => res.status(503).json({ error: "planned research failure" }));
+app.get("/download.csv", (_req, res) => {
+  res.setHeader("content-type", "text/csv; charset=utf-8");
+  res.setHeader("content-disposition", "attachment; filename=research.csv");
+  res.send("actionId,name\n7788,Trace\n");
+});
+app.get("/download.xlsx", async (_req, res) => {
+  const workbook = new ExcelJS.Workbook();
+  workbook.addWorksheet("Trace Data").addRows([["actionId", "name"], [7788, "Trace"]]);
+  workbook.addWorksheet("Result").addRows([["code"], [-1]]);
+  const bytes = await workbook.xlsx.writeBuffer();
+  res.setHeader("content-type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("content-disposition", "attachment; filename=research.xlsx");
+  res.send(Buffer.from(bytes));
 });
 
 app.get("/cascade", (_req, res) => {

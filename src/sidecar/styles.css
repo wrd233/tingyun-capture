@@ -32,6 +32,13 @@ button:hover {
   border-color: #607783;
 }
 
+button:focus-visible,
+input:focus-visible,
+summary:focus-visible {
+  outline: 3px solid #2f6f91;
+  outline-offset: 2px;
+}
+
 button.danger {
   border-color: #a94442;
   color: #842029;
@@ -138,6 +145,40 @@ h3 {
   margin-top: 14px;
 }
 
+.contextGrid,
+.researchReview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.contextGrid > div,
+.researchReview > section {
+  border: 1px solid #d4dde1;
+  border-radius: 6px;
+  padding: 12px;
+  background: #fff;
+  min-width: 0;
+}
+
+.contextGrid span,
+.contextGrid strong,
+.contextGrid code {
+  display: block;
+}
+
+.contextGrid span {
+  color: #5c6870;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.contextGrid code {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
 .metrics div {
   border: 1px solid #d4dde1;
   border-radius: 6px;
@@ -238,6 +279,8 @@ code {
 @media (max-width: 900px) {
   .band,
   .columns,
+  .contextGrid,
+  .researchReview,
   .sessionRow {
     grid-template-columns: 1fr;
   }

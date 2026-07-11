@@ -1,4 +1,6 @@
-# tingyun-capture v1 需求文档包
+# tingyun-capture 需求文档包
+
+当前 v2 增量合同见 `v2-capture-research-workstation.md`。它覆盖 v1 的 Greenfield 假设：v2 必须兼容读取 v1 Session 与 AI-ready，不原地迁移或重写旧 Raw。
 
 > 状态：需求已完成深度 grill-me 收口，可进入设计与实现阶段。  
 > 范围：全新 Greenfield 重建；macOS；本地单用户；纯代码；零 LLM。  
@@ -33,7 +35,8 @@ AI-ready Evidence Package
 
 建议实现 Agent 按以下顺序阅读：
 
-1. `00_项目定位与顶层设计.md`
+1. `v2-capture-research-workstation.md`
+2. `00_项目定位与顶层设计.md`
 2. `01_产品需求与范围.md`
 3. `02_用户流程与Sidecar交互.md`
 4. `03_Capture采集引擎需求.md`

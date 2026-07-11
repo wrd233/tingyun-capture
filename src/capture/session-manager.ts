@@ -62,10 +62,10 @@ export class SessionManager {
     return this.manifest?.status === "ACTIVE" && this.acceptingNewRequests;
   }
 
-  async startSession(name: string): Promise<RawManifest> {
+  async startSession(name: string, requestedSessionId?: string): Promise<RawManifest> {
     if (!name.trim()) throw new Error("Session name is required");
     await this.guardCanStartSession();
-    this.manifest = await this.store.createSession(name.trim());
+    this.manifest = await this.store.createSession(name.trim(), requestedSessionId);
     this.acceptingNewRequests = true;
     this.currentStep = undefined;
     this.recentEvents = [];

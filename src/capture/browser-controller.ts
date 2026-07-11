@@ -63,11 +63,59 @@ export class BrowserController {
     return {};
   }
 
+  async reloadVerify(): Promise<Record<string, unknown>> {
+    const page = this.activeTargetPage();
+    if (!page) return { status: "FAILED", reason: "no_target_page", at: nowIso() };
+    const before = await this.activeTabContext();
+    const eventId = this.sessions.ids.next("interaction");
+    await this.sessions.recordEvent({
+      type: "interaction_recorded",
+      at: nowIso(),
+      interaction_id: eventId,
+      interaction: { tab_id: before.tab_id, interaction_type: "url_verify", verification_kind: "reload", url: before.url, title: before.title }
+    });
+    try {
+      await page.reload({ waitUntil: "domcontentloaded", timeout: 15_000 });
+      const after = await this.activeTabContext();
+      return { status: "PASS", kind: "reload", event_id: eventId, before, after, at: nowIso() };
+    } catch (error) {
+      return { status: "FAILED", kind: "reload", event_id: eventId, before, error: String(error), at: nowIso() };
+    }
+  }
+
+  async newTabVerify(): Promise<Record<string, unknown>> {
+    const page = this.activeTargetPage();
+    if (!page || !this.context) return { status: "FAILED", reason: "no_target_page", at: nowIso() };
+    const before = await this.activeTabContext();
+    const eventId = this.sessions.ids.next("interaction");
+    await this.sessions.recordEvent({
+      type: "interaction_recorded",
+      at: nowIso(),
+      interaction_id: eventId,
+      interaction: { tab_id: before.tab_id, interaction_type: "url_verify", verification_kind: "new_tab", url: before.url, title: before.title }
+    });
+    try {
+      const targetUrl = page.url();
+      const created = this.context.waitForEvent("page", { timeout: 5_000 });
+      await page.evaluate((url) => window.open(url, "_blank"), targetUrl);
+      const newPage = await created;
+      await newPage.waitForLoadState("domcontentloaded", { timeout: 15_000 });
+      const info = this.pages.get(newPage);
+      return { status: "PASS", kind: "new_tab", event_id: eventId, source: before, target: { page_id: info?.tabId, url: newPage.url(), title: await newPage.title().catch(() => undefined) }, at: nowIso() };
+    } catch (error) {
+      return { status: "FAILED", kind: "new_tab", event_id: eventId, source: before, error: String(error), at: nowIso() };
+    }
+  }
+
   async openPageForTest(url: string): Promise<Page> {
     if (!this.context) throw new Error("BrowserController is not started");
     const page = await this.context.newPage();
     await page.goto(url);
     return page;
+  }
+
+  private activeTargetPage(): Page | undefined {
+    return [...this.pages.keys()].find((page) => !page.isClosed() && isTargetUrl(this.config, page.url()));
   }
 
   async recordBaseline(): Promise<void> {

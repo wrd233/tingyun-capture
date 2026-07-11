@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "task_id": "r3-trace-exceptions",
+  "title": "Trace Exceptions",
+  "goal": "Record the Trace to exception list, stack, and logged-error path",
+  "success_criteria": ["record a non-empty exception item", "record a non-empty stack frame", "record trace tree and node identity candidates"],
+  "do_not_assume": ["an exact match is a candidate and not proven lineage"],
+  "created_at": "2026-07-11T00:00:00.000Z"
+}

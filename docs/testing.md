@@ -25,6 +25,11 @@ Current coverage includes:
 - Header, URL, JSON redaction.
 - Reference cURL generation.
 - Local browser E2E: cascade form, request/response bodies, pre-submit form state with trigger, hidden-submit navigation non-submit, opener tab facts, AI-ready output.
+- v2 Task schema, task-owned Session lifecycle, stale interruption without Raw rewrite, and MARK/NOTE/FINISH append.
+- deterministic Interaction Windows, opener association, Navigation Observations, exact-scalar candidates, filters, IDs, tokens, and endpoint shapes.
+- CSV/XLSX sheet normalization with SHA256 and deterministic filenames; legacy `.xls` is explicitly `UNSUPPORTED_FORMAT`.
+- stable shareable tokenization, secret blocking, allowlist packaging, ZIP rescanning, validation, and repeated core hashes.
+- full local fixture Task flow: list/detail/SPA/popup, actionId response-to-query/body reuse, CSV/XLSX downloads, Reload/New-tab Verify, both exports, and validation.
 
 ## Local Test Site Scenarios
 

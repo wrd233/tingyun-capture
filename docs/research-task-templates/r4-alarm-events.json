@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "task_id": "r4-alarm-events",
+  "title": "Alarm Events",
+  "goal": "Record event list filters, detail, metric curve, and related-object observations",
+  "success_criteria": ["record time and business-system filter facts", "record event detail navigation", "record metric and related-object endpoint observations"],
+  "do_not_assume": ["/alarm-api and /nalarm-api are not automatically equivalent", "HTTP 200 does not imply business success"],
+  "created_at": "2026-07-11T00:00:00.000Z"
+}

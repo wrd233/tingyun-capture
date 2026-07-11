@@ -1,3 +1,4 @@
+import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import type { CaptureConfig } from "../shared/types";
@@ -39,7 +40,7 @@ export function buildConfig(input: {
   return {
     targetOrigin,
     outputDir,
-    profileDir: path.resolve(input.profileDir ?? parsed.profile_dir ?? path.join(outputDir, "browser-profile")),
+    profileDir: path.resolve(input.profileDir ?? parsed.profile_dir ?? path.join(os.homedir(), ".tingyun-capture", "browser-profile")),
     port,
     sidecarOrigin: `http://127.0.0.1:${port}`,
     finalizationTimeoutMs: parsed.finalization_timeout_ms ?? 10_000,

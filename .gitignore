@@ -2,9 +2,17 @@ node_modules/
 dist/
 .DS_Store
 .env
+env.sh
 *.log
 data/
 capture-data/
+browser-profile/
+browser-profiles/
+*.zip
+*-private/
+*-shareable/
+temporary-export-*/
+downloads/
 playwright-report/
 test-results/
 coverage/

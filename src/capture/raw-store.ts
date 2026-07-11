@@ -76,8 +76,9 @@ export class RawStore {
     return changed;
   }
 
-  async createSession(name: string): Promise<RawManifest> {
-    const sessionId = newSessionId();
+  async createSession(name: string, requestedSessionId?: string): Promise<RawManifest> {
+    const sessionId = requestedSessionId ?? newSessionId();
+    if (!/^session-[A-Za-z0-9._-]+$/.test(sessionId)) throw new Error("session_id must be filesystem-safe and start with session-");
     this.paths = this.pathsFor(sessionId);
     await createSessionDirs(this.paths);
     this.writer = new JsonlWriter<RawEvent>(this.paths.events);
@@ -134,9 +135,22 @@ export class RawStore {
     if (!this.writer) throw new PersistenceFailure("No active JSONL writer");
     try {
       await this.writer.append(event);
+      await this.appendV2SplitFact(event);
     } catch (error) {
       throw new PersistenceFailure("Failed to append Raw event", error);
     }
+  }
+
+  private async appendV2SplitFact(event: RawEvent): Promise<void> {
+    if (!this.paths || !fs.existsSync(path.join(this.paths.root, "session.json"))) return;
+    let file = "browser-events.jsonl";
+    if (event.type === "request_started" || event.type === "request_completed" || event.type === "request_failed") file = "network-requests.jsonl";
+    if (event.type === "response_received") file = "network-responses.jsonl";
+    if (event.type === "url_changed") file = "navigations.jsonl";
+    if (event.type === "download_started" || event.type === "download_completed") file = "downloads.jsonl";
+    if (event.type === "note_created") file = "annotations.jsonl";
+    if (event.type === "integrity_gap") file = "omissions.jsonl";
+    await new JsonlWriter<RawEvent>(path.join(this.paths.raw, file)).append(event);
   }
 
   async recordGap(gap: Omit<IntegrityGap, "at">): Promise<void> {

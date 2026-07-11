@@ -13,11 +13,21 @@ npm run build
 npm start -- --target-origin http://127.0.0.1:5174
 ```
 
+For a named Task:
+
+```bash
+npm start -- task init --task-id local-research --title "Local research" --goal "Record fixture facts"
+npm start -- --task-id local-research --target-origin http://127.0.0.1:5174
+```
+
 Useful options:
 
 ```bash
 --output-dir capture-data
---profile-dir capture-data/browser-profile
+--profile-dir ~/.tingyun-capture/browser-profile
+--data-root capture-data
+--task-id local-research
+--session-id session-local-001
 --port 43127
 --body-limit-bytes 10485760
 --no-open-sidecar
@@ -50,6 +60,18 @@ npm start -- --target-origin http://127.0.0.1:5174
 ## Raw Safety
 
 Raw is private local data. Do not share `capture-data/<session_id>/raw/`. Use the AI-ready ZIP for external analysis.
+
+v2 Task data is under `capture-data/tasks/<task_id>/`. The persistent profile is outside this tree. Private exports still block credentials, environment files, shell history, and browser profiles. Shareable exports include only generated allowlisted content and refuse publication on high-risk findings.
+
+## Validate and Export
+
+```bash
+npm start -- validate --task-id local-research
+npm start -- export --task-id local-research --type private
+npm start -- export --task-id local-research --type shareable
+```
+
+`PASS` means schemas and required references are intact. `PARTIAL` is reserved for policy omission, interruption, or optional verification not performed. Broken schemas or references are `FAILED`.
 
 ## AI-ready Review
 

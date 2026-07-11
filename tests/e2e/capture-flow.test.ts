@@ -9,6 +9,10 @@ import { BrowserController } from "../../src/capture/browser-controller";
 import { RawStore } from "../../src/capture/raw-store";
 import { SessionManager } from "../../src/capture/session-manager";
 import { createTestSiteApp } from "../../src/test-site/server";
+import { TaskManager } from "../../src/capture/task-manager";
+import { ResearchPackageBuilder } from "../../src/capture/research-package";
+import { validateTask } from "../../src/capture/validator";
+import { readJsonl } from "../../src/capture/jsonl";
 
 let tmp = "";
 let server: Server | undefined;
@@ -109,6 +113,61 @@ test("records opener_tab_id for target-origin tabs opened by the browser", async
   expect(newTab?.type).toBe("tab_created");
   if (!rootTab || rootTab.type !== "tab_created" || !newTab || newTab.type !== "tab_created") throw new Error("missing tab facts");
   expect(newTab.tab.opener_tab_id).toBe(rootTab.tab.tab_id);
+});
+
+test("completes an evidence-first Task flow with observations downloads validation and both exports", async () => {
+  const dataRoot = path.join(tmp, "capture-data");
+  const tasks = new TaskManager(dataRoot);
+  await tasks.createTask({ task_id: "fixture-research", title: "Fixture Research", goal: "Record navigation and actionId reuse", success_criteria: ["记录点击前后 URL", "记录路由参数候选来源", "下载 CSV 和 XLSX"], do_not_assume: ["不得把 HTTP 200 解释为业务成功"], created_at: "2026-07-11T00:00:00.000Z" });
+  const config = buildConfig({ targetOrigin: origin, outputDir: tasks.taskPaths("fixture-research").sessions, profileDir: path.join(tmp, "profile"), openSidecar: false });
+  config.finalizationTimeoutMs = 250;
+  const store = new RawStore(config);
+  const aiReady = new AiReadyGenerator(config, store);
+  const sessions = new SessionManager(config, store, aiReady);
+  browser = new BrowserController(config, store, sessions);
+  await browser.start();
+
+  const manifest = await sessions.startSession("Evidence-first fixture", "session-fixture-001");
+  await tasks.createSession("fixture-research", { session_id: manifest.session_id, started_at: manifest.start_time });
+  const page = await browser.openPageForTest(`${origin}/research-list`);
+  await tasks.appendAnnotation("fixture-research", manifest.session_id, { annotation_id: "ann-001", kind: "MARK", content: "Open Trace detail", page_id: "page-list", current_url: page.url() });
+  await page.click("#open-detail");
+  await page.waitForURL(/research-detail/);
+  await page.waitForFunction(() => document.querySelector("#detail-result")?.textContent?.includes("7788"));
+  const popupPromise = page.waitForEvent("popup");
+  await page.click("#open-popup");
+  const popup = await popupPromise;
+  await popup.waitForLoadState("domcontentloaded");
+  await tasks.appendAnnotation("fixture-research", manifest.session_id, { annotation_id: "ann-002", kind: "NOTE", content: "Popup observed", current_url: popup.url() });
+  await page.click("#download-csv");
+  await page.click("#download-xlsx");
+  await browser.reloadVerify();
+  await browser.newTabVerify();
+  await tasks.appendAnnotation("fixture-research", manifest.session_id, { annotation_id: "ann-003", kind: "FINISH", content: "Fixture flow finished", current_url: page.url() });
+  await sessions.endSession("Fixture complete");
+  await tasks.closeSession("fixture-research", manifest.session_id);
+
+  const packages = new ResearchPackageBuilder(dataRoot);
+  await packages.aggregate("fixture-research");
+  const paths = tasks.sessionPaths("fixture-research", manifest.session_id);
+  const windows = await readJsonl<Record<string, unknown>>(path.join(paths.derived, "interaction-windows.jsonl"));
+  const navigation = await readJsonl<Record<string, unknown>>(path.join(paths.derived, "navigation-observations.jsonl"));
+  const correlations = await readJsonl<Record<string, unknown>>(path.join(paths.derived, "correlation-candidates.jsonl"));
+  const downloads = await readJsonl<Record<string, unknown>>(path.join(paths.derived, "download-index.jsonl"));
+  const splitRequests = await readJsonl<Record<string, unknown>>(path.join(paths.raw, "network-requests.jsonl"));
+  const privateExport = await packages.exportTask("fixture-research", "private");
+  const shareableExport = await packages.exportTask("fixture-research", "shareable");
+
+  expect(windows.length).toBeGreaterThan(0);
+  expect(navigation.length).toBeGreaterThan(0);
+  expect(correlations.length).toBeGreaterThan(0);
+  expect(downloads.filter((item) => item.status === "NORMALIZED")).toHaveLength(2);
+  expect(splitRequests.length).toBeGreaterThan(0);
+  const validation = await validateTask(dataRoot, "fixture-research");
+  expect(validation.status, validation.errors.join("\n")).toBe("PASS");
+  expect(privateExport.security.status).toBe("PASS");
+  expect(shareableExport.security.status).toBe("PASS");
+  expect(shareableExport.files.some((file) => file.includes("raw/"))).toBe(false);
 });
 
 function listenRandomPort(): Promise<Server> {

@@ -8,6 +8,10 @@ import { AiReadyGenerator } from "../capture/ai-ready";
 import { RawStore, readJson } from "../capture/raw-store";
 import { SessionManager } from "../capture/session-manager";
 import { BrowserController } from "../capture/browser-controller";
+import { TaskManager } from "../capture/task-manager";
+import { ResearchPackageBuilder } from "../capture/research-package";
+import { validateTask } from "../capture/validator";
+import { JsonlWriter, readJsonl } from "../capture/jsonl";
 
 export interface AppDeps {
   config: CaptureConfig;
@@ -15,6 +19,9 @@ export interface AppDeps {
   sessions: SessionManager;
   browser: BrowserController;
   aiReady: AiReadyGenerator;
+  tasks?: TaskManager;
+  taskId?: string;
+  defaultSessionId?: string;
 }
 
 export function createApi(deps: AppDeps): express.Express {
@@ -27,14 +34,15 @@ export function createApi(deps: AppDeps): express.Express {
   app.get("/api/health", (_req, res) => res.json({ ok: true, target_origin: deps.config.targetOrigin }));
   app.get("/api/state", async (_req, res, next) => {
     try {
-      res.json({ ...deps.sessions.state(), recentSessions: await enrichSessions(deps.store) });
+      res.json({ ...deps.sessions.state(), currentTask: deps.taskId ? await deps.tasks?.readTask(deps.taskId) : undefined, currentPage: await deps.browser.activeTabContext(), captureHealth: { ok: true }, recentSessions: await enrichSessions(deps.store) });
     } catch (error) {
       next(error);
     }
   });
   app.post("/api/session/start", async (req, res, next) => {
     try {
-      const manifest = await deps.sessions.startSession(String(req.body.name ?? ""));
+      const manifest = await deps.sessions.startSession(String(req.body.name ?? ""), req.body.session_id ? String(req.body.session_id) : deps.defaultSessionId);
+      if (deps.tasks && deps.taskId) await deps.tasks.createSession(deps.taskId, { session_id: manifest.session_id, started_at: manifest.start_time });
       await deps.browser.recordBaseline();
       res.json(manifest);
     } catch (error) {
@@ -43,7 +51,9 @@ export function createApi(deps: AppDeps): express.Express {
   });
   app.post("/api/session/end", async (req, res, next) => {
     try {
-      res.json(await deps.sessions.endSession(req.body.summary ? String(req.body.summary) : undefined));
+      const ended = await deps.sessions.endSession(req.body.summary ? String(req.body.summary) : undefined);
+      if (deps.tasks && deps.taskId) await deps.tasks.closeSession(deps.taskId, ended.session_id, ended.end_time);
+      res.json(ended);
     } catch (error) {
       next(error);
     }
@@ -87,6 +97,75 @@ export function createApi(deps: AppDeps): express.Express {
     } catch (error) {
       next(error);
     }
+  });
+  app.post("/api/annotation", async (req, res, next) => {
+    try {
+      if (!deps.tasks || !deps.taskId) throw new Error("Research Task runtime is not configured");
+      const sessionId = deps.sessions.activeSessionId();
+      if (!sessionId) throw new Error("A RUNNING Session is required");
+      const kind = String(req.body.kind ?? "") as "MARK" | "NOTE" | "FINISH";
+      if (!["MARK", "NOTE", "FINISH"].includes(kind)) throw new Error("kind must be MARK, NOTE, or FINISH");
+      const page = await deps.browser.activeTabContext();
+      await deps.tasks.appendAnnotation(deps.taskId, sessionId, {
+        annotation_id: deps.sessions.ids.next("annotation"),
+        kind,
+        content: String(req.body.content ?? ""),
+        page_id: page.tab_id,
+        current_url: page.url
+      });
+      res.json({ ok: true });
+    } catch (error) { next(error); }
+  });
+  app.post("/api/navigation/record-current-url", async (req, res, next) => {
+    try {
+      if (!deps.tasks || !deps.taskId) throw new Error("Research Task runtime is not configured");
+      const sessionId = deps.sessions.activeSessionId();
+      if (!sessionId) throw new Error("A RUNNING Session is required");
+      const page = await deps.browser.activeTabContext();
+      await deps.tasks.appendAnnotation(deps.taskId, sessionId, { annotation_id: deps.sessions.ids.next("annotation"), kind: "NOTE", content: String(req.body.content ?? "Record Current URL"), page_id: page.tab_id, current_url: page.url });
+      res.json({ status: "OBSERVED", page });
+    } catch (error) { next(error); }
+  });
+  app.post("/api/navigation/reload-verify", async (_req, res, next) => {
+    try { res.json(await recordVerification(deps, await deps.browser.reloadVerify())); } catch (error) { next(error); }
+  });
+  app.post("/api/navigation/new-tab-verify", async (_req, res, next) => {
+    try { res.json(await recordVerification(deps, await deps.browser.newTabVerify())); } catch (error) { next(error); }
+  });
+  app.post("/api/navigation/cross-session-verify", async (req, res, next) => {
+    try {
+      if (!deps.tasks || !deps.taskId) throw new Error("Research Task runtime is not configured");
+      const sessionId = deps.sessions.activeSessionId();
+      if (!sessionId) throw new Error("A new RUNNING Session is required");
+      const page = await deps.browser.activeTabContext();
+      const expectedUrl = req.body.expected_url ? String(req.body.expected_url) : undefined;
+      const result = {
+        type: "cross_session_verify_result",
+        event_id: deps.sessions.ids.next("verification"),
+        at: new Date().toISOString(),
+        prior_navigation_id: String(req.body.navigation_id ?? ""),
+        prior_session_id: req.body.prior_session_id ? String(req.body.prior_session_id) : undefined,
+        page_id: page.tab_id,
+        url: page.url,
+        title: page.title,
+        status: expectedUrl && page.url !== expectedUrl ? "UNSTABLE" : "PASS"
+      };
+      await new JsonlWriter(path.join(deps.tasks.sessionPaths(deps.taskId, sessionId).raw, "navigations.jsonl")).append(result);
+      res.json(result);
+    } catch (error) { next(error); }
+  });
+  app.post("/api/validate", async (_req, res, next) => {
+    try {
+      if (!deps.tasks || !deps.taskId) throw new Error("Research Task runtime is not configured");
+      res.json(await validateTask(deps.tasks.dataRoot, deps.taskId, new Date().toISOString()));
+    } catch (error) { next(error); }
+  });
+  app.post("/api/export/:type", async (req, res, next) => {
+    try {
+      if (!deps.tasks || !deps.taskId) throw new Error("Research Task runtime is not configured");
+      if (req.params.type !== "private" && req.params.type !== "shareable") throw new Error("type must be private or shareable");
+      res.json(await new ResearchPackageBuilder(deps.tasks.dataRoot).exportTask(deps.taskId, req.params.type));
+    } catch (error) { next(error); }
   });
   app.get("/api/session/:sessionId/review", async (req, res, next) => {
     try {
@@ -183,5 +262,22 @@ async function buildReview(store: RawStore, sessionId: string): Promise<{
     }
   }
   const integrity = await readJson(paths.integrity).catch(() => undefined);
-  return { manifest, annotations, events, requests: [...requestMap.values()], integrity, bodies };
+  const derived = await readV2Derived(paths.derived);
+  return { manifest, annotations, events, requests: [...requestMap.values()], integrity, bodies, ...derived };
+}
+
+async function recordVerification(deps: AppDeps, result: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const sessionId = deps.sessions.activeSessionId();
+  if (deps.tasks && deps.taskId && sessionId) {
+    await new JsonlWriter(path.join(deps.tasks.sessionPaths(deps.taskId, sessionId).raw, "navigations.jsonl")).append({ schema_version: 1, ...result });
+  }
+  return result;
+}
+
+async function readV2Derived(root: string): Promise<Record<string, unknown[]>> {
+  const result: Record<string, unknown[]> = {};
+  for (const [key, name] of Object.entries({ interactionWindows: "interaction-windows.jsonl", navigationObservations: "navigation-observations.jsonl", correlationCandidates: "correlation-candidates.jsonl", downloadIndex: "download-index.jsonl", endpointObservations: "endpoint-observations.jsonl" })) {
+    result[key] = await readJsonl(path.join(root, name)).catch(() => []);
+  }
+  return result;
 }
